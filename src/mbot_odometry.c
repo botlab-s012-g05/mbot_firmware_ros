@@ -17,5 +17,12 @@ void mbot_calculate_odometry(float vx, float vy, float wz, float dt, float* x, f
 }
 
 void mbot_calculate_gyrodometry(float vx, float vy, float wz, float dt, float gyro_z, float* x, float* y, float* theta) {
-    return;
+    *x += vx * dt * cos(*theta) - vy * dt * sin(*theta);
+    *y += vx * dt * sin(*theta) + vy * dt * cos(*theta);
+    *theta += gyro_z * dt;
+
+    // Normalize theta to [-pi, pi]
+    while (*theta > PI) *theta -= 2.0 * PI;
+    while (*theta <= -PI) *theta += 2.0 * PI;
+   
 }
