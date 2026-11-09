@@ -11,6 +11,7 @@ rcl_publisher_t motor_vel_publisher;
 rcl_publisher_t tf_publisher;
 rcl_publisher_t encoders_publisher;
 rcl_publisher_t battery_publisher;
+rcl_publisher_t gyrodom_publisher;
 
 sensor_msgs__msg__Imu imu_msg;
 nav_msgs__msg__Odometry odom_msg;
@@ -18,6 +19,7 @@ mbot_interfaces__msg__MotorVelocity motor_vel_msg;
 tf2_msgs__msg__TFMessage tf_msg;
 mbot_interfaces__msg__Encoders encoders_msg;
 mbot_interfaces__msg__BatteryADC battery_msg;
+nav_msgs__msg__Odometry gyrodom_msg;
 
 rcl_subscription_t cmd_vel_subscriber;
 rcl_subscription_t motor_vel_cmd_subscriber;
@@ -46,6 +48,7 @@ int mbot_ros_comms_init_messages(rcl_allocator_t* allocator) {
     sensor_msgs__msg__Imu__init(&imu_msg);
 
     nav_msgs__msg__Odometry__init(&odom_msg);
+    nav_msgs__msg__Odometry__init(&gyrodom_msg);
     tf2_msgs__msg__TFMessage__init(&tf_msg);
     geometry_msgs__msg__TransformStamped__Sequence__init(&tf_msg.transforms, 1);
 
@@ -76,6 +79,9 @@ int mbot_ros_comms_init_messages(rcl_allocator_t* allocator) {
     odom_msg.child_frame_id.capacity = FRAME_ID_CAPACITY;
     snprintf(odom_msg.child_frame_id.data, FRAME_ID_CAPACITY, "base_footprint");
     odom_msg.child_frame_id.size = strlen(odom_msg.child_frame_id.data);
+
+    gyrodom_msg.header.frame_id = odom_msg.header.frame_id;
+    gyrodom_msg.child_frame_id = odom_msg.child_frame_id;
 
     // Zero all message structs for safe initialization
     memset(&cmd_vel_msg_buffer, 0, sizeof(cmd_vel_msg_buffer));
@@ -130,6 +136,13 @@ int mbot_ros_comms_init_publishers(rcl_node_t *node) {
         ROSIDL_GET_MSG_TYPE_SUPPORT(mbot_interfaces, msg, BatteryADC),
         "battery_adc");
     if (ret != RCL_RET_OK) { printf("[FATAL] Failed to init battery_publisher: %d\n", ret); fflush(stdout); return MBOT_ERROR; }
+
+    ret = rclc_publisher_init_default(
+        &gyrodom_publisher,
+        node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
+        "gyrodom");
+    if (ret != RCL_RET_OK) { printf("[FATAL] Failed to init gyrodom_publisher: %d\n", ret); fflush(stdout); return MBOT_ERROR; }
     
     return MBOT_OK;
 }
@@ -199,6 +212,9 @@ void reset_odometry_callback(const void * req, void * res) {
     mbot_state.odom_x = 0.0f;
     mbot_state.odom_y = 0.0f;
     mbot_state.odom_theta = 0.0f;
+    mbot_state.gyro_odom_x = 0.0f;
+    mbot_state.gyro_odom_y = 0.0f;
+    mbot_state.gyro_odom_theta = 0.0f;
     EXIT_CRITICAL();
 
     // Set response
@@ -283,4 +299,4 @@ int mbot_ros_comms_add_to_executor(rclc_executor_t *executor) {
     }
 
     return MBOT_OK;
-} 
+}
