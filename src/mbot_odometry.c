@@ -18,7 +18,7 @@ void mbot_calculate_odometry(float vx, float vy, float wz, float dt, float* x, f
 
 void mbot_calculate_gyrodometry(float vx, float vy, float wz, float dt, float gyro_z, float* x, float* y, float* theta) {
     (void)wz; // Gyrodometry uses the gyro reading instead of wheel-derived angular velocity.
-    const float calibrated_gyro_z = gyro_z + 0.12f; // Apply gyro bias correction (rad/s).
+    const float calibrated_gyro_z = gyro_z; // + 0.12f Apply gyro bias correction (rad/s).
     *x += vx * dt * cos(*theta) - vy * dt * sin(*theta);
     *y += vx * dt * sin(*theta) + vy * dt * cos(*theta);
     *theta += calibrated_gyro_z * dt;

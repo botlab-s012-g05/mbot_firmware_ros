@@ -280,7 +280,7 @@ static bool mbot_loop(repeating_timer_t *rt) {
 
         gyrodom_msg.twist.twist.linear.x = mbot_state.vx;
         gyrodom_msg.twist.twist.linear.y = mbot_state.vy;
-        gyrodom_msg.twist.twist.angular.z = mbot_state.imu_gyro[2] + 0.12f; // Apply gyro bias correction (rad/s)
+        gyrodom_msg.twist.twist.angular.z = mbot_state.imu_gyro[2] +0.00069096;  //Apply gyro bias correction (rad/s)
 
         /* TF message (odom -> base_footprint) */
         tf_msg.transforms.data[0].header.stamp.sec     = odom_msg.header.stamp.sec;
