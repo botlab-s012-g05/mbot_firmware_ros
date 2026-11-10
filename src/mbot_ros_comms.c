@@ -119,12 +119,13 @@ int mbot_ros_comms_init_publishers(rcl_node_t *node) {
         "odom");
     if (ret != RCL_RET_OK) { printf("[FATAL] Failed to init odom_publisher: %d\n", ret); fflush(stdout); return MBOT_ERROR; }
 
-    ret = rclc_publisher_init_default(
-        &gyrodom_publisher,
-        node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
-        "gyrodom");
-    if (ret != RCL_RET_OK) { printf("[FATAL] Failed to init gyrodom_publisher: %d\n", ret); fflush(stdout); return MBOT_ERROR; }
+    // /gyrodom is off now that /odom carries gyrodometry.
+    // ret = rclc_publisher_init_default(
+    //     &gyrodom_publisher,
+    //     node,
+    //     ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
+    //     "gyrodom");
+    // if (ret != RCL_RET_OK) { printf("[FATAL] Failed to init gyrodom_publisher: %d\n", ret); fflush(stdout); return MBOT_ERROR; }
 
     ret = rclc_publisher_init_best_effort(
         &motor_vel_publisher,
