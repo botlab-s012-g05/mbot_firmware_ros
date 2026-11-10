@@ -248,7 +248,6 @@ static bool mbot_loop(repeating_timer_t *rt) {
         );
         /* Populate odometry and TF ROS messages with the exact timestamp of this calculation */
         int64_t stamp_ns = rmw_uros_epoch_nanos();
-
         /* Odometry message */
         odom_msg.header.stamp.sec     = stamp_ns / 1000000000LL;
         odom_msg.header.stamp.nanosec = stamp_ns % 1000000000LL;
@@ -262,7 +261,6 @@ static bool mbot_loop(repeating_timer_t *rt) {
         odom_msg.pose.pose.orientation.x = 0.0f;
         odom_msg.pose.pose.orientation.y = 0.0f;
         odom_msg.pose.pose.orientation.z = sy;
-s
         odom_msg.twist.twist.linear.x  = mbot_state.vx;
         odom_msg.twist.twist.linear.y  = mbot_state.vy;
         odom_msg.twist.twist.angular.z = mbot_state.wz;
@@ -282,7 +280,7 @@ s
 
         gyrodom_msg.twist.twist.linear.x = mbot_state.vx;
         gyrodom_msg.twist.twist.linear.y = mbot_state.vy;
-        gyrodom_msg.twist.twist.angular.z = mbot_state.wz;
+        gyrodom_msg.twist.twist.angular.z = mbot_state.imu_gyro[2] + 0.12f; // Apply gyro bias correction (rad/s)
 
         /* TF message (odom -> base_footprint) */
         tf_msg.transforms.data[0].header.stamp.sec     = odom_msg.header.stamp.sec;

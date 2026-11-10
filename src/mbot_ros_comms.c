@@ -33,6 +33,10 @@ rcl_service_t reset_odometry_service;
 std_srvs__srv__Trigger_Request reset_odom_req;
 std_srvs__srv__Trigger_Response reset_odom_res;
 
+rcl_service_t reset_gyrodometry_service;
+std_srvs__srv__Trigger_Request reset_gyrodometry_req;
+std_srvs__srv__Trigger_Response reset_gyrodometry_res;
+
 rcl_service_t lidar_power_service;
 std_srvs__srv__SetBool_Request lidar_power_req;
 std_srvs__srv__SetBool_Response lidar_power_res;
@@ -57,6 +61,11 @@ int mbot_ros_comms_init_messages(rcl_allocator_t* allocator) {
     reset_odom_res.message.data = (char*)allocator->allocate(128, allocator->state);
     reset_odom_res.message.capacity = 128;
     reset_odom_res.message.size = 0;
+
+    std_srvs__srv__Trigger_Response__init(&reset_gyrodometry_res);
+    reset_gyrodometry_res.message.data = (char*)allocator->allocate(128, allocator->state);
+    reset_gyrodometry_res.message.capacity = 128;
+    reset_gyrodometry_res.message.size = 0;
 
     std_srvs__srv__SetBool_Response__init(&lidar_power_res);
     lidar_power_res.message.data = (char*)allocator->allocate(128, allocator->state);
@@ -188,6 +197,18 @@ int mbot_ros_comms_init_services(rcl_node_t *node) {
         return MBOT_ERROR;
     }
 
+    // Initialize gyro-integrated odometry reset service
+    ret = rclc_service_init_default(
+        &reset_gyrodometry_service,
+        node,
+        ROSIDL_GET_SRV_TYPE_SUPPORT(std_srvs, srv, Trigger),
+        "reset_gyrodometry");
+    if (ret != RCL_RET_OK) {
+        printf("[FATAL] Failed to init reset_gyrodometry_service: %d\n", ret);
+        fflush(stdout);
+        return MBOT_ERROR;
+    }
+
     // Initialize LiDAR power service
     ret = rclc_service_init_default(
         &lidar_power_service,
@@ -223,6 +244,23 @@ void reset_odometry_callback(const void * req, void * res) {
     response->message.size = strlen(response->message.data);
 
     printf("[INFO] Odometry reset to origin\n");
+}
+
+void reset_gyrodometry_callback(const void * req, void * res) {
+    (void)req; // Request is empty for Trigger service
+    std_srvs__srv__Trigger_Response * response = (std_srvs__srv__Trigger_Response *)res;
+
+    ENTER_CRITICAL();
+    mbot_state.gyro_odom_x = 0.0f;
+    mbot_state.gyro_odom_y = 0.0f;
+    mbot_state.gyro_odom_theta = 0.0f;
+    EXIT_CRITICAL();
+
+    response->success = true;
+    snprintf(response->message.data, response->message.capacity, "Gyro odometry reset to (0, 0, 0)");
+    response->message.size = strlen(response->message.data);
+
+    printf("[INFO] Gyro odometry reset to origin\n");
 }
 
 void lidar_power_callback(const void * req, void * res) {
@@ -288,6 +326,13 @@ int mbot_ros_comms_add_to_executor(rclc_executor_t *executor) {
                                    &reset_odom_res, &reset_odometry_callback);
     if (ret != RCL_RET_OK) {
         printf("[ERROR] Failed to add reset_odometry_service to executor: %d\n", ret);
+        return MBOT_ERROR;
+    }
+
+    ret = rclc_executor_add_service(executor, &reset_gyrodometry_service, &reset_gyrodometry_req,
+                                   &reset_gyrodometry_res, &reset_gyrodometry_callback);
+    if (ret != RCL_RET_OK) {
+        printf("[ERROR] Failed to add reset_gyrodometry_service to executor: %d\n", ret);
         return MBOT_ERROR;
     }
 

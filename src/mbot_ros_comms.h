@@ -51,6 +51,10 @@ extern rcl_service_t reset_odometry_service;
 extern std_srvs__srv__Trigger_Request reset_odom_req;
 extern std_srvs__srv__Trigger_Response reset_odom_res;
 
+extern rcl_service_t reset_gyrodometry_service;
+extern std_srvs__srv__Trigger_Request reset_gyrodometry_req;
+extern std_srvs__srv__Trigger_Response reset_gyrodometry_res;
+
 extern rcl_service_t lidar_power_service;
 extern std_srvs__srv__SetBool_Request lidar_power_req;
 extern std_srvs__srv__SetBool_Response lidar_power_res;
@@ -66,6 +70,7 @@ void cmd_vel_callback(const void * msgin);
 void motor_vel_cmd_callback(const void * msgin);
 void motor_pwm_cmd_callback(const void * msgin);
 void reset_odometry_callback(const void * req, void * res);
+void reset_gyrodometry_callback(const void * req, void * res);
 void lidar_power_callback(const void * req, void * res);
 
 // Helper to add comms to executor

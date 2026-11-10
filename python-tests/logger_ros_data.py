@@ -9,6 +9,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Imu
 
 
 class ROSDataLogger(Node):
@@ -34,12 +35,18 @@ class ROSDataLogger(Node):
             'cmd_linear_x',
             'odom_linear_x',
             'cmd_angular_z',
-            'odom_angular_z'
+            'odom_angular_z',
+            'gyro_x',
+            'gyro_y',
+            'gyro_z'
         ])
 
         # Latest commanded velocities
         self.cmd_linear_x = 0.0
         self.cmd_angular_z = 0.0
+        self.gyro_x = 0.0
+        self.gyro_y = 0.0
+        self.gyro_z = 0.0
 
         # Subscribers
         self.cmd_sub = self.create_subscription(
@@ -56,11 +63,23 @@ class ROSDataLogger(Node):
             10
         )
 
+        self.imu_sub = self.create_subscription(
+            Imu,
+            '/imu',
+            self.imu_callback,
+            10
+        )
+
         self.get_logger().info(f'Logging velocity data to: {filename}')
 
     def cmd_callback(self, msg):
         self.cmd_linear_x = msg.linear.x
         self.cmd_angular_z = msg.angular.z
+
+    def imu_callback(self, msg):
+        self.gyro_x = msg.angular_velocity.x
+        self.gyro_y = msg.angular_velocity.y
+        self.gyro_z = msg.angular_velocity.z
 
     def odom_callback(self, msg):
         # Use odometry timestamp
@@ -72,7 +91,10 @@ class ROSDataLogger(Node):
             self.cmd_linear_x,
             msg.twist.twist.linear.x,
             self.cmd_angular_z,
-            msg.twist.twist.angular.z
+            msg.twist.twist.angular.z,
+            self.gyro_x,
+            self.gyro_y,
+            self.gyro_z
         ])
 
         self.file.flush()
