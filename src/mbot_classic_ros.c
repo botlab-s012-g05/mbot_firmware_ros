@@ -231,11 +231,15 @@ static bool mbot_loop(repeating_timer_t *rt) {
             &mbot_state.vy,
             &mbot_state.wz
         );
+        // Integrate over the measured time since the last encoder read, the same time the wheel
+        // speeds were computed over. Using MAIN_LOOP_PERIOD undercounted distance and rotation
+        // whenever the loop ran slower than nominal.
+        float odom_dt = mbot_state.encoder_delta_t * 1e-6f;
         mbot_calculate_odometry(
             mbot_state.vx,
             mbot_state.vy,
             mbot_state.wz,
-            MAIN_LOOP_PERIOD,
+            odom_dt,
             &mbot_state.odom_x,
             &mbot_state.odom_y,
             &mbot_state.odom_theta
@@ -244,7 +248,7 @@ static bool mbot_loop(repeating_timer_t *rt) {
             mbot_state.vx,
             mbot_state.vy,
             mbot_state.wz,
-            MAIN_LOOP_PERIOD,
+            odom_dt,
             mbot_state.imu_gyro[2],
             &mbot_state.gyrodom_x,
             &mbot_state.gyrodom_y,
@@ -461,7 +465,10 @@ int main() {
 
     printf("\nStarting MBot Loop...\n");
     mbot_state.last_encoder_time = time_us_64(); 
-    if (!add_repeating_timer_ms((int32_t)(MAIN_LOOP_PERIOD * 1000.0f), mbot_loop, NULL, &mbot_loop_timer)){
+    // A negative delay times the period from the start of one call to the start of the next.
+    // A positive delay times it from the end of one call, which added the loop's own run time
+    // (about 0.6 ms) to every period and ran the loop at about 94 Hz instead of 100 Hz.
+    if (!add_repeating_timer_ms(-(int32_t)(MAIN_LOOP_PERIOD * 1000.0f), mbot_loop, NULL, &mbot_loop_timer)){
         printf("Failed to add control loop timer! Halting.\r\n");
         while(1) {tight_loop_contents();}
     }
