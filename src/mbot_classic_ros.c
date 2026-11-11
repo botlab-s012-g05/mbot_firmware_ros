@@ -411,6 +411,12 @@ static bool mbot_loop(repeating_timer_t *rt) {
         pwm_left = 0.0f;
         pwm_right = 0.0f;
     }
+    // Clamp to full power before filtering. FF + PID can add up to about twice full power, and
+    // the filter held that excess, so the motors stayed at full speed for up to half a second
+    // after the command dropped. That made the robot overshoot when driving fast.
+    pwm_left = fmaxf(-1.0f, fminf(1.0f, pwm_left));
+    pwm_right = fmaxf(-1.0f, fminf(1.0f, pwm_right));
+
     // Low-pass filter if enabled
     if (enable_pwm_lpf) {
         pwm_left = rc_filter_march(&mbot_left_pwm_lpf, pwm_left);
@@ -550,7 +556,13 @@ static int mbot_init_hardware(void){
     // Initialize the IMU 
     mbot_imu_config = mbot_imu_default_config();
     mbot_imu_config.sample_rate = 200;
-    mbot_imu_init(&mbot_imu_data, mbot_imu_config);
+    // The IMU sometimes fails to start and then reads all zeros, so retry a few times. If it still
+    // fails, odometry falls back to the encoders' yaw rate (see mbot_loop).
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        if (mbot_imu_init(&mbot_imu_data, mbot_imu_config) == 0) break;
+        printf("[WARN] IMU failed to start (attempt %d of 3)\n", attempt);
+        sleep_ms(200);
+    }
 
     // Initialize ADC
     adc_init();
