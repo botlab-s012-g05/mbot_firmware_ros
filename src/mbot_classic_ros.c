@@ -205,6 +205,12 @@ static void mbot_publish_state(void) {
         ret = rcl_publish(&odom_publisher, &odom_msg, NULL);
     }
 
+    // Gyrodometry - every 4th tick, offset from odometry (25 Hz at 100 Hz timer).
+    // Off now that /odom carries gyrodometry.
+    // if (tick % 4 == 1) {
+    //     ret = rcl_publish(&gyrodom_publisher, &gyrodom_msg, NULL);
+    // }
+
     // Battery - every 25th tick (4 Hz at 100 Hz timer)
     if (tick % 25 == 0) {
         ret = rcl_publish(&battery_publisher, &battery_msg, NULL);
@@ -226,25 +232,38 @@ static bool mbot_loop(repeating_timer_t *rt) {
             &mbot_state.vy,
             &mbot_state.wz
         );
-        mbot_calculate_odometry(
-            mbot_state.vx,
-            mbot_state.vy,
-            mbot_state.wz,
-            MAIN_LOOP_PERIOD,
-            &mbot_state.odom_x,
-            &mbot_state.odom_y,
-            &mbot_state.odom_theta
-        );
-        // mbot_calculate_gyrodometry(
+        // Integrate over the measured time since the last encoder read, the same time the wheel
+        // speeds were computed over. Using MAIN_LOOP_PERIOD undercounted distance and rotation
+        // whenever the loop ran slower than nominal.
+        float odom_dt = mbot_state.encoder_delta_t * 1e-6f;
+        // Encoder-only odometry, replaced by gyrodometry below. Its turns were off by a few
+        // percent and the error changed from run to run.
+        // mbot_calculate_odometry(
         //     mbot_state.vx,
         //     mbot_state.vy,
         //     mbot_state.wz,
-        //     MAIN_LOOP_PERIOD,
-        //     mbot_state.imu_gyro[2],
+        //     odom_dt,
         //     &mbot_state.odom_x,
         //     &mbot_state.odom_y,
         //     &mbot_state.odom_theta
         // );
+        // If the IMU failed to start (mbot_imu_init's error is ignored), it reports all zeros,
+        // while a working one always measures gravity. Fall back to the encoders' yaw rate then,
+        // so the heading still changes and the robot can't spin forever waiting on a dead gyro.
+        bool imu_ok = mbot_state.imu_accel[0] != 0.0f || mbot_state.imu_accel[1] != 0.0f ||
+                      mbot_state.imu_accel[2] != 0.0f;
+        float gyro_z = imu_ok ? mbot_state.imu_gyro[2] : mbot_state.wz;
+        // Gyrodometry publishes on /odom, which later tasks use.
+        mbot_calculate_gyrodometry(
+            mbot_state.vx,
+            mbot_state.vy,
+            mbot_state.wz,
+            odom_dt,
+            gyro_z,
+            &mbot_state.odom_x,
+            &mbot_state.odom_y,
+            &mbot_state.odom_theta
+        );
         /* Populate odometry and TF ROS messages with the exact timestamp of this calculation */
         int64_t stamp_ns = rmw_uros_epoch_nanos();
 
@@ -265,6 +284,23 @@ static bool mbot_loop(repeating_timer_t *rt) {
         odom_msg.twist.twist.linear.x  = mbot_state.vx;
         odom_msg.twist.twist.linear.y  = mbot_state.vy;
         odom_msg.twist.twist.angular.z = mbot_state.wz;
+
+        /* Gyrodometry message, used to compare against /odom. /odom now carries gyrodometry. */
+        // gyrodom_msg.header.stamp = odom_msg.header.stamp;
+        // gyrodom_msg.pose.pose.position.x = mbot_state.gyrodom_x;
+        // gyrodom_msg.pose.pose.position.y = mbot_state.gyrodom_y;
+        // gyrodom_msg.pose.pose.position.z = 0.0f;
+        //
+        // float gyrodom_cy = cosf(mbot_state.gyrodom_theta * 0.5f);
+        // float gyrodom_sy = sinf(mbot_state.gyrodom_theta * 0.5f);
+        // gyrodom_msg.pose.pose.orientation.w = gyrodom_cy;
+        // gyrodom_msg.pose.pose.orientation.x = 0.0f;
+        // gyrodom_msg.pose.pose.orientation.y = 0.0f;
+        // gyrodom_msg.pose.pose.orientation.z = gyrodom_sy;
+        //
+        // gyrodom_msg.twist.twist.linear.x  = mbot_state.vx;
+        // gyrodom_msg.twist.twist.linear.y  = mbot_state.vy;
+        // gyrodom_msg.twist.twist.angular.z = mbot_state.imu_gyro[2];
 
         /* TF message (odom -> base_footprint) */
         tf_msg.transforms.data[0].header.stamp.sec     = odom_msg.header.stamp.sec;
@@ -375,6 +411,12 @@ static bool mbot_loop(repeating_timer_t *rt) {
         pwm_left = 0.0f;
         pwm_right = 0.0f;
     }
+    // Clamp to full power before filtering. FF + PID can add up to about twice full power, and
+    // the filter held that excess, so the motors stayed at full speed for up to half a second
+    // after the command dropped. That made the robot overshoot when driving fast.
+    pwm_left = fmaxf(-1.0f, fminf(1.0f, pwm_left));
+    pwm_right = fmaxf(-1.0f, fminf(1.0f, pwm_right));
+
     // Low-pass filter if enabled
     if (enable_pwm_lpf) {
         pwm_left = rc_filter_march(&mbot_left_pwm_lpf, pwm_left);
@@ -439,7 +481,10 @@ int main() {
 
     printf("\nStarting MBot Loop...\n");
     mbot_state.last_encoder_time = time_us_64(); 
-    if (!add_repeating_timer_ms((int32_t)(MAIN_LOOP_PERIOD * 1000.0f), mbot_loop, NULL, &mbot_loop_timer)){
+    // A negative delay times the period from the start of one call to the start of the next.
+    // A positive delay times it from the end of one call, which added the loop's own run time
+    // (about 0.6 ms) to every period and ran the loop at about 94 Hz instead of 100 Hz.
+    if (!add_repeating_timer_ms(-(int32_t)(MAIN_LOOP_PERIOD * 1000.0f), mbot_loop, NULL, &mbot_loop_timer)){
         printf("Failed to add control loop timer! Halting.\r\n");
         while(1) {tight_loop_contents();}
     }
@@ -511,7 +556,13 @@ static int mbot_init_hardware(void){
     // Initialize the IMU 
     mbot_imu_config = mbot_imu_default_config();
     mbot_imu_config.sample_rate = 200;
-    mbot_imu_init(&mbot_imu_data, mbot_imu_config);
+    // The IMU sometimes fails to start and then reads all zeros, so retry a few times. If it still
+    // fails, odometry falls back to the encoders' yaw rate (see mbot_loop).
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        if (mbot_imu_init(&mbot_imu_data, mbot_imu_config) == 0) break;
+        printf("[WARN] IMU failed to start (attempt %d of 3)\n", attempt);
+        sleep_ms(200);
+    }
 
     // Initialize ADC
     adc_init();
